@@ -51,7 +51,7 @@ async function fetchJson(url, headers = {}) {
 
 export async function checkRemoteVersion() {
   const local = readLocalRelease();
-  const repo = store.data.settings.githubRepo || 'your-github-user/lumeshell';
+  const repo = store.data.settings.githubRepo || 'poouo/LumeShell';
   const result = {
     localVersion: local.version,
     remoteVersion: null,
@@ -62,7 +62,7 @@ export async function checkRemoteVersion() {
     error: null
   };
 
-  if (!repo || repo.includes('your-github-user')) {
+  if (!repo) {
     result.error = 'GitHub repository is not configured';
     return result;
   }

@@ -25,16 +25,16 @@ Backups contain `store.json` and `app-secret.key`, so a backup can restore all e
 
 ## Quick Install
 
-After replacing `OWNER/lumeshell` with your GitHub repository:
+Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OWNER/lumeshell/main/scripts/install.sh | sudo LUMESHELL_REPO=OWNER/lumeshell bash
+curl -fsSL https://raw.githubusercontent.com/poouo/LumeShell/main/scripts/install.sh | sudo LUMESHELL_REPO=poouo/LumeShell bash
 ```
 
 Windows PowerShell:
 
 ```powershell
-$env:LUMESHELL_REPO="OWNER/lumeshell"; iwr https://raw.githubusercontent.com/OWNER/lumeshell/main/scripts/install.ps1 -UseBasicParsing | iex
+$env:LUMESHELL_REPO="poouo/LumeShell"; iwr https://raw.githubusercontent.com/poouo/LumeShell/main/scripts/install.ps1 -UseBasicParsing | iex
 ```
 
 ## Manual Development

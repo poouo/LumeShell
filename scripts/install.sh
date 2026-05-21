@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="${LUMESHELL_REPO:-your-github-user/lumeshell}"
+REPO="${LUMESHELL_REPO:-poouo/LumeShell}"
 BRANCH="${LUMESHELL_BRANCH:-main}"
 INSTALL_DIR="${LUMESHELL_INSTALL_DIR:-/opt/lumeshell}"
 SERVICE_NAME="${LUMESHELL_SERVICE_NAME:-lumeshell}"

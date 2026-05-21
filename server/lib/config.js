@@ -11,7 +11,7 @@ export const config = {
   host: process.env.LUMESHELL_HOST || '0.0.0.0',
   port: Number(process.env.LUMESHELL_PORT || process.env.PORT || 8090),
   dataDir: path.resolve(rootDir, process.env.LUMESHELL_DATA_DIR || 'data'),
-  githubRepo: process.env.LUMESHELL_GITHUB_REPO || 'your-github-user/lumeshell',
+  githubRepo: process.env.LUMESHELL_GITHUB_REPO || 'poouo/LumeShell',
   publicUrl: process.env.LUMESHELL_PUBLIC_URL || 'http://localhost:8090',
   adminPassword: process.env.LUMESHELL_ADMIN_PASSWORD || '',
   defaultTokenTtlHours: Number(process.env.LUMESHELL_TOKEN_TTL_HOURS || 24),

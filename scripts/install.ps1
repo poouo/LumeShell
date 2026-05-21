@@ -6,7 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-if (-not $Repo) { $Repo = "your-github-user/lumeshell" }
+if (-not $Repo) { $Repo = "poouo/LumeShell" }
 
 function Step($Text) { Write-Host "[$(Get-Date -Format HH:mm:ss)] $Text" }
 
