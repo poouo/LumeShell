@@ -1,0 +1,5 @@
+{
+  "name": "lumeshell-client",
+  "private": true,
+  "type": "module"
+}

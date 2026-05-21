@@ -1,0 +1,10 @@
+node_modules/
+client/dist/
+data/
+.gitrepo/
+.env
+.env.local
+*.log
+tmp/
+.DS_Store
+Thumbs.db

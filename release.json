@@ -1,0 +1,9 @@
+{
+  "name": "LumeShell",
+  "version": "0.1.0",
+  "channel": "stable",
+  "notes": [
+    "Initial open-source release with WebSSH terminal, encrypted connection storage, SFTP file manager, quick commands, themes, and upgrade tasks."
+  ],
+  "minNode": "20.10.0"
+}
