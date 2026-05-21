@@ -2,6 +2,7 @@ node_modules/
 client/dist/
 data/
 .gitrepo/
+.git.broken*/
 .env
 .env.local
 *.log
