@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { requireAuth } from '../lib/auth.js';
 import { config } from '../lib/config.js';
 import { deleteRemote, listRemote, mkdirRemote, renameRemote, streamDownload, uploadRemote } from '../lib/sftp.js';
@@ -35,8 +36,19 @@ filesRouter.post('/delete', asyncHandler(async (req, res) => {
 }));
 
 filesRouter.post('/upload', upload.array('files'), asyncHandler(async (req, res) => {
-  const uploaded = await uploadRemote(req.body.connectionId, req.body.path || '/', req.files || []);
-  res.json(uploaded);
+  try {
+    const uploaded = await uploadRemote(req.body.connectionId, req.body.path || '/', req.files || []);
+    res.json(uploaded);
+  } catch (err) {
+    for (const file of req.files || []) {
+      try {
+        await fs.rm(file.path, { force: true });
+      } catch {
+        // Ignore temp cleanup errors; the original upload failure is more useful.
+      }
+    }
+    throw err;
+  }
 }));
 
 filesRouter.get('/download', asyncHandler(async (req, res) => {

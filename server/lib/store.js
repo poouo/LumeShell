@@ -36,6 +36,8 @@ export class Store {
     fs.mkdirSync(config.dataDir, { recursive: true });
     const uploadTmp = path.join(config.dataDir, 'upload-tmp');
     fs.mkdirSync(uploadTmp, { recursive: true });
+    const backupsDir = path.join(config.dataDir, 'backups');
+    fs.mkdirSync(backupsDir, { recursive: true });
 
     if (!fs.existsSync(secretPath)) {
       fs.writeFileSync(secretPath, randomId(32), { mode: 0o600 });
