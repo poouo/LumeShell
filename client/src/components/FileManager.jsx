@@ -1,31 +1,94 @@
-import { Download, File, Folder, FolderPlus, RefreshCcw, Trash2, Upload } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Download, File, Folder, FolderOpen, FolderPlus, LoaderCircle, RefreshCcw, Trash2, Upload } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, downloadUrl } from '../api.js';
 import { formatBytes, joinRemote, parentDir } from '../utils.js';
 
 export function FileManager({ connection, t }) {
-  const [path, setPath] = useState(connection?.remoteBase || '/');
+  const [path, setPath] = useState(normalizeRemotePath(connection?.remoteBase || '/'));
   const [items, setItems] = useState([]);
+  const [cache, setCache] = useState({});
+  const [pendingPath, setPendingPath] = useState('');
   const [loading, setLoading] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [menu, setMenu] = useState(null);
+  const navigationRef = useRef(0);
 
   useEffect(() => {
-    setPath(connection?.remoteBase || '/');
+    if (!connection) return;
+    const basePath = normalizeRemotePath(connection.remoteBase || '/');
+    setPath(basePath);
+    setItems([]);
+    setCache({});
+    setPendingPath('');
+    setMenu(null);
+    loadDirectory(basePath, { activate: true, force: true }).catch(() => {});
   }, [connection?.id]);
 
   useEffect(() => {
-    if (connection) refresh();
-  }, [connection?.id, path]);
+    if (!menu) return undefined;
+    const close = () => setMenu(null);
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [menu]);
 
-  async function refresh() {
-    if (!connection) return;
+  async function loadDirectory(targetPath, options = {}) {
+    if (!connection) return [];
+    const target = normalizeRemotePath(targetPath);
+    const { activate = false, force = false } = options;
+    const activationId = activate ? ++navigationRef.current : 0;
+
+    if (!force && cache[target]) {
+      if (activate) {
+        setPath(target);
+        setItems(cache[target]);
+        setPendingPath('');
+        setMenu(null);
+      }
+      return cache[target];
+    }
+
+    if (activate) {
+      setPath(target);
+      setItems(cache[target] || []);
+      setPendingPath(target);
+      setMenu(null);
+    }
     setLoading(true);
     try {
-      const query = new URLSearchParams({ connectionId: connection.id, path });
-      setItems(await api(`/api/files/list?${query}`));
+      const query = new URLSearchParams({ connectionId: connection.id, path: target });
+      const nextItems = await api(`/api/files/list?${query}`);
+      setCache((current) => ({ ...current, [target]: nextItems }));
+      if (activate && activationId === navigationRef.current) {
+        setItems(nextItems);
+        setPendingPath('');
+      }
+      return nextItems;
     } finally {
       setLoading(false);
+      if (activate && activationId === navigationRef.current) setPendingPath('');
     }
+  }
+
+  async function navigateTo(targetPath) {
+    setMenu(null);
+    await loadDirectory(targetPath, { activate: true });
+  }
+
+  async function refresh() {
+    setMenu(null);
+    await loadDirectory(path, { activate: true, force: true });
   }
 
   async function mkdir() {
@@ -36,9 +99,22 @@ export function FileManager({ connection, t }) {
   }
 
   async function remove(item) {
+    setMenu(null);
     if (!window.confirm(t('deletePathConfirm', { path: item.path }))) return;
     await api('/api/files/delete', { method: 'POST', body: { connectionId: connection.id, path: item.path } });
     await refresh();
+  }
+
+  function openContextMenu(event, item) {
+    event.preventDefault();
+    event.stopPropagation();
+    const width = 170;
+    const height = item.type === 'directory' ? 132 : 92;
+    setMenu({
+      item,
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8))
+    });
   }
 
   async function uploadFiles(fileList) {
@@ -63,6 +139,7 @@ export function FileManager({ connection, t }) {
       path: `/${parts.slice(0, index + 1).join('/')}`
     }))];
   }, [path]);
+  const isLoadingCurrent = loading || Boolean(pendingPath);
 
   if (!connection) return <section className="files-panel empty-state">{t('selectServerFiles')}</section>;
 
@@ -84,6 +161,7 @@ export function FileManager({ connection, t }) {
         <div>
           <span className="eyebrow">SFTP</span>
           <h2>{t('files')}</h2>
+          {isLoadingCurrent && <small className="inline-loading"><LoaderCircle className="spin" size={13} />{t('loadingFiles')}</small>}
         </div>
         <div className="toolbar-actions">
           <label className="icon-button" title={t('uploadFiles')}>
@@ -104,41 +182,76 @@ export function FileManager({ connection, t }) {
       </div>
       <div className="breadcrumb">
         {crumbs.map((crumb) => (
-          <button type="button" key={crumb.path} onClick={() => setPath(crumb.path)}>{crumb.label}</button>
+          <button type="button" key={crumb.path} onClick={() => navigateTo(crumb.path)}>{crumb.label}</button>
         ))}
       </div>
       <div className="file-table">
         {path !== '/' && (
-          <button className="file-row" type="button" onClick={() => setPath(parentDir(path))}>
-            <Folder size={17} />
-            <span>..</span>
+          <div className="file-row">
+            <button type="button" className="file-name" onClick={() => navigateTo(parentDir(path))}>
+              <Folder size={17} />
+              <span>..</span>
+            </button>
             <small />
-            <small />
-          </button>
+          </div>
         )}
-        {items.map((item) => (
-          <div className="file-row" key={item.path}>
-            <button type="button" className="file-name" onClick={() => item.type === 'directory' && setPath(item.path)}>
+        {isLoadingCurrent && (
+          <div className="file-row file-row-status">
+            <LoaderCircle className="spin" size={16} />
+            <span>{t('loadingFiles')}</span>
+            <small />
+          </div>
+        )}
+        {!isLoadingCurrent && items.map((item) => (
+          <div className="file-row" key={item.path} onContextMenu={(event) => openContextMenu(event, item)}>
+            <button type="button" className="file-name" onClick={() => item.type === 'directory' && navigateTo(item.path)}>
               {item.type === 'directory' ? <Folder size={17} /> : <File size={17} />}
               <span>{item.name}</span>
             </button>
             <small>{item.type === 'directory' ? t('folder') : formatBytes(item.size)}</small>
-            <small>{item.modifiedAt ? new Date(item.modifiedAt).toLocaleString() : ''}</small>
-            <span className="row-actions">
-              <a className="icon-button" title={t('download')} href={downloadUrl('/api/files/download', { connectionId: connection.id, path: item.path })}>
-                <Download size={15} />
-              </a>
-              <button className="icon-button danger" type="button" title={t('delete')} onClick={() => remove(item)}>
-                <Trash2 size={15} />
-              </button>
-            </span>
           </div>
         ))}
+        {!isLoadingCurrent && items.length === 0 && <div className="file-empty">{t('emptyDirectory')}</div>}
       </div>
-      {loading && <div className="drop-hint">{t('loadingFiles')}</div>}
       {dragging && <div className="drop-hint">{t('dropUpload')}</div>}
+      {menu && createPortal(
+        <div
+          className="file-context-menu"
+          style={{ left: menu.x, top: menu.y }}
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {menu.item.type === 'directory' && (
+            <button type="button" className="context-menu-item" onClick={() => navigateTo(menu.item.path)}>
+              <FolderOpen size={15} />
+              <span>{t('openFolder')}</span>
+            </button>
+          )}
+          <a
+            className="context-menu-item"
+            href={downloadUrl('/api/files/download', { connectionId: connection.id, path: menu.item.path })}
+            onClick={() => setMenu(null)}
+          >
+            <Download size={15} />
+            <span>{t('download')}</span>
+          </a>
+          <button type="button" className="context-menu-item danger" onClick={() => remove(menu.item)}>
+            <Trash2 size={15} />
+            <span>{t('delete')}</span>
+          </button>
+        </div>,
+        document.body
+      )}
     </section>
   );
+}
+
+function normalizeRemotePath(input = '/') {
+  let next = String(input || '/').replaceAll('\\', '/');
+  if (!next.startsWith('/')) next = `/${next}`;
+  next = next.replace(/\/+/g, '/');
+  if (next.length > 1) next = next.replace(/\/$/, '');
+  return next || '/';
 }
 
 async function collectDroppedFiles(dataTransfer) {

@@ -7,6 +7,13 @@ import { randomId } from './crypto.js';
 import { store } from './store.js';
 
 const tasks = new Map();
+const VERSION_CACHE = {
+  data: null,
+  checkedAt: 0
+};
+
+export const AUTO_VERSION_CHECK_MS = 10 * 60 * 1000;
+export const MANUAL_VERSION_CHECK_MS = 30 * 1000;
 
 export function readLocalRelease() {
   const releasePath = path.join(rootDir, 'release.json');
@@ -49,7 +56,7 @@ async function fetchJson(url, headers = {}) {
   return response.json();
 }
 
-export async function checkRemoteVersion() {
+async function fetchRemoteVersion() {
   const local = readLocalRelease();
   const repo = store.data.settings.githubRepo || 'poouo/LumeShell';
   const result = {
@@ -90,6 +97,29 @@ export async function checkRemoteVersion() {
   return result;
 }
 
+export async function checkRemoteVersion({ mode = 'auto' } = {}) {
+  const now = Date.now();
+  const ttl = mode === 'manual' ? MANUAL_VERSION_CHECK_MS : AUTO_VERSION_CHECK_MS;
+  if (VERSION_CACHE.data && now - VERSION_CACHE.checkedAt < ttl) {
+    return {
+      ...VERSION_CACHE.data,
+      cached: true,
+      checkedAt: new Date(VERSION_CACHE.checkedAt).toISOString(),
+      nextCheckAt: new Date(VERSION_CACHE.checkedAt + ttl).toISOString()
+    };
+  }
+
+  const data = await fetchRemoteVersion();
+  VERSION_CACHE.data = data;
+  VERSION_CACHE.checkedAt = now;
+  return {
+    ...data,
+    cached: false,
+    checkedAt: new Date(now).toISOString(),
+    nextCheckAt: new Date(now + ttl).toISOString()
+  };
+}
+
 export function startUpgradeTask() {
   const id = randomId(8);
   const emitter = new EventEmitter();
@@ -98,6 +128,8 @@ export function startUpgradeTask() {
     status: 'running',
     startedAt: new Date().toISOString(),
     events: [],
+    progress: 0,
+    stage: 'queued',
     emitter
   };
   tasks.set(id, task);
@@ -109,7 +141,7 @@ export function startUpgradeTask() {
     ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath]
     : [scriptPath];
 
-  pushEvent(task, 'start', `Starting upgrade with ${script}`);
+  pushProgress(task, 5, 'preparing');
   const child = spawn(command, args, {
     cwd: rootDir,
     env: {
@@ -118,25 +150,43 @@ export function startUpgradeTask() {
     }
   });
 
-  child.stdout.on('data', (chunk) => pushEvent(task, 'log', chunk.toString()));
-  child.stderr.on('data', (chunk) => pushEvent(task, 'log', chunk.toString()));
+  child.stdout.on('data', (chunk) => consumeUpgradeOutput(task, chunk.toString()));
+  child.stderr.on('data', (chunk) => consumeUpgradeOutput(task, chunk.toString()));
   child.on('error', (err) => {
     task.status = 'failed';
-    pushEvent(task, 'error', err.message);
-    pushEvent(task, 'done', 'Upgrade failed');
+    pushProgress(task, 100, 'failed', err.message, 'error');
+    pushProgress(task, 100, 'failed', 'Upgrade failed', 'done');
   });
   child.on('close', (code) => {
     task.status = code === 0 ? 'completed' : 'failed';
-    pushEvent(task, 'done', code === 0 ? 'Upgrade completed. Restart the service if it is not supervised.' : `Upgrade exited with code ${code}`);
+    if (code === 0) {
+      pushProgress(task, 100, 'completed', 'Upgrade completed', 'done');
+    } else {
+      pushProgress(task, 100, 'failed', `Upgrade exited with code ${code}`, 'done');
+    }
   });
 
   return task;
 }
 
-function pushEvent(task, type, message) {
+function consumeUpgradeOutput(task, output) {
+  const text = output.toLowerCase();
+  if (text.includes('fetch')) pushProgress(task, 20, 'fetching');
+  else if (text.includes('install')) pushProgress(task, 45, 'installing');
+  else if (text.includes('build')) pushProgress(task, 70, 'building');
+  else if (text.includes('restart')) pushProgress(task, 90, 'restarting');
+  else if (task.progress < 15) pushProgress(task, 15, 'running');
+}
+
+function pushProgress(task, progress, stage, message = '', type = 'progress') {
+  task.progress = Math.max(task.progress || 0, progress);
+  task.stage = stage;
   const event = {
     type,
+    progress: task.progress,
+    stage,
     message: String(message).trimEnd(),
+    status: task.status,
     at: new Date().toISOString()
   };
   task.events.push(event);

@@ -8,9 +8,9 @@ export const systemRouter = Router();
 
 systemRouter.use(requireAuth);
 
-systemRouter.get('/version', asyncHandler(async (_req, res) => {
+systemRouter.get('/version', asyncHandler(async (req, res) => {
   const local = readLocalRelease();
-  const remote = await checkRemoteVersion();
+  const remote = await checkRemoteVersion({ mode: req.query.mode === 'manual' ? 'manual' : 'auto' });
   res.json({ local, remote });
 }));
 

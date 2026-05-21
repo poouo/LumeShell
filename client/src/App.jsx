@@ -1,4 +1,4 @@
-import { Moon, Settings, Sun, TerminalSquare } from 'lucide-react';
+import { FolderOpen, Moon, Settings, Sun, TerminalSquare, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
 import { CommandsPanel } from './components/CommandsPanel.jsx';
@@ -22,6 +22,7 @@ export default function App() {
   const [activeTabId, setActiveTabId] = useState('');
   const [view, setView] = useState('workspace');
   const [error, setError] = useState('');
+  const [serverManagerOpen, setServerManagerOpen] = useState(false);
 
   const theme = settings.theme || 'dark';
   const language = settings.language || 'zh-CN';
@@ -30,10 +31,22 @@ export default function App() {
     () => connections.find((connection) => connection.id === activeConnectionId) || connections[0],
     [connections, activeConnectionId]
   );
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId),
+    [tabs, activeTabId]
+  );
+  const activeSshConnection = useMemo(
+    () => connections.find((connection) => connection.id === activeTab?.connectionId) || null,
+    [connections, activeTab?.connectionId]
+  );
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
 
   useEffect(() => {
     bootstrap();
@@ -92,7 +105,6 @@ export default function App() {
   }
 
   async function deleteConnection(id) {
-    if (!window.confirm('Delete this connection?')) return;
     await api(`/api/connections/${id}`, { method: 'DELETE' });
     setConnections((current) => current.filter((connection) => connection.id !== id));
     setTabs((current) => current.filter((tab) => tab.connectionId !== id));
@@ -106,10 +118,19 @@ export default function App() {
     setView('workspace');
   }
 
+  function activateTab(tab) {
+    setActiveTabId(tab.id);
+    setActiveConnectionId(tab.connectionId);
+  }
+
   function closeTab(id) {
     setTabs((current) => {
       const next = current.filter((tab) => tab.id !== id);
-      if (activeTabId === id) setActiveTabId(next[0]?.id || '');
+      if (activeTabId === id) {
+        const nextActive = next[0];
+        setActiveTabId(nextActive?.id || '');
+        if (nextActive) setActiveConnectionId(nextActive.connectionId);
+      }
       return next;
     });
   }
@@ -132,8 +153,6 @@ export default function App() {
   function runCommand(command) {
     const tab = tabs.find((item) => item.id === activeTabId);
     if (!tab) {
-      const target = connections.find((connection) => connection.id === (command.connectionId || activeConnectionId)) || activeConnection;
-      if (target) openTab(target, command.command);
       return;
     }
     window.dispatchEvent(new CustomEvent('lumeshell:send', {
@@ -164,7 +183,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${view === 'settings' ? 'settings-mode' : ''}`}>
       <header className="topbar">
         <div className="brand-lockup compact">
           <img src="/logo.svg" alt="" />
@@ -194,8 +213,31 @@ export default function App() {
       {view === 'settings' ? (
         <SettingsPanel settings={settings} onSettings={setSettings} t={t} />
       ) : (
-        <main className="workspace-layout">
+        <>
+          <div className="workspace-toolbar">
+            <button className="icon-button folder-button" type="button" title={t('serverManager')} onClick={() => setServerManagerOpen(true)}>
+              <FolderOpen size={20} />
+            </button>
+            <div className="toolbar-tabs">
+              {tabs.map((tab) => (
+                <button
+                  type="button"
+                  className={`top-tab ${tab.id === activeTabId ? 'active' : ''}`}
+                  key={tab.id}
+                  onClick={() => activateTab(tab)}
+                >
+                  <span>{tab.title}</span>
+                  <X size={13} onClick={(event) => {
+                    event.stopPropagation();
+                    closeTab(tab.id);
+                  }} />
+                </button>
+              ))}
+            </div>
+          </div>
           <ConnectionPanel
+            open={serverManagerOpen}
+            onClose={() => setServerManagerOpen(false)}
             connections={connections}
             activeConnectionId={activeConnection?.id}
             onSelect={setActiveConnectionId}
@@ -205,25 +247,21 @@ export default function App() {
             onOpenTab={openTab}
             t={t}
           />
-          <div className="main-column">
-            <MetricsPanel connection={activeConnection} t={t} />
+          <main className="workspace-layout finalshell-layout">
+            <div className="left-column">
+              <MetricsPanel connection={activeSshConnection} t={t} />
+              <FileManager connection={activeSshConnection} t={t} />
+            </div>
+            <div className="main-column">
             <TerminalTabs
               tabs={tabs}
               activeTabId={activeTabId}
-              onActiveTab={setActiveTabId}
-              onCloseTab={closeTab}
-              onNewTab={openTab}
-              connection={activeConnection}
-              commands={commands.filter((command) => !command.connectionId || command.connectionId === activeConnection?.id)}
               t={t}
             />
           </div>
           <div className="right-column">
-            <FileManager connection={activeConnection} t={t} />
             <CommandsPanel
               commands={commands}
-              connections={connections}
-              activeConnectionId={activeConnection?.id}
               onCreate={createCommand}
               onUpdate={updateCommand}
               onDelete={deleteCommand}
@@ -231,7 +269,8 @@ export default function App() {
               t={t}
             />
           </div>
-        </main>
+          </main>
+        </>
       )}
     </div>
   );

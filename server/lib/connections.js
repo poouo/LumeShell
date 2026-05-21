@@ -83,13 +83,44 @@ export function toSshConfig(connection) {
   return cfg;
 }
 
+export function isSshConnectionError(err) {
+  return Boolean(
+    err?.level ||
+    /handshake|authentication|connection|timed out|ECONN|ENOTFOUND|EHOSTUNREACH|ETIMEDOUT/i.test(err?.message || '')
+  );
+}
+
+export function formatSshError(err) {
+  if (err?.level === 'client-timeout' || /handshake/i.test(err?.message || '')) {
+    return 'SSH handshake timed out. Check the host, port, firewall, or SSH service.';
+  }
+  if (err?.level === 'client-authentication' || /authentication/i.test(err?.message || '')) {
+    return 'SSH authentication failed. Check the username, password, or key.';
+  }
+  return err?.message || 'SSH connection failed.';
+}
+
 export function connectSsh(connection) {
   const client = new Client();
   const config = toSshConfig(connection);
   return new Promise((resolve, reject) => {
-    client.once('ready', () => resolve(client));
-    client.once('error', reject);
-    client.connect(config);
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      client.end();
+      reject(err);
+    };
+    client.once('ready', () => {
+      settled = true;
+      resolve(client);
+    });
+    client.once('error', fail);
+    try {
+      client.connect(config);
+    } catch (err) {
+      fail(err);
+    }
   });
 }
 

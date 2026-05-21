@@ -2,12 +2,20 @@ import { Download, KeyRound, RefreshCw, ShieldCheck, Upload } from 'lucide-react
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
+const MANUAL_CHECK_COOLDOWN_MS = 30 * 1000;
+
 export function SettingsPanel({ settings, onSettings, t }) {
   const [draft, setDraft] = useState(settings || {});
   const [version, setVersion] = useState(null);
-  const [upgradeLog, setUpgradeLog] = useState([]);
+  const [checking, setChecking] = useState(false);
+  const [nextManualCheckAt, setNextManualCheckAt] = useState(0);
+  const [upgradeProgress, setUpgradeProgress] = useState({ progress: 0, stage: 'idle', status: 'idle', message: '' });
 
   useEffect(() => setDraft(settings || {}), [settings]);
+
+  useEffect(() => {
+    checkVersion('auto');
+  }, []);
 
   async function saveSettings(event) {
     event.preventDefault();
@@ -27,16 +35,32 @@ export function SettingsPanel({ settings, onSettings, t }) {
     window.location.reload();
   }
 
-  async function checkVersion() {
-    setVersion(await api('/api/system/version'));
+  async function checkVersion(mode = 'manual') {
+    const now = Date.now();
+    if (mode === 'manual' && now < nextManualCheckAt) return;
+    setChecking(true);
+    try {
+      setVersion(await api(`/api/system/version?mode=${mode}`));
+      if (mode === 'manual') setNextManualCheckAt(now + MANUAL_CHECK_COOLDOWN_MS);
+    } finally {
+      setChecking(false);
+    }
   }
 
   async function startUpgrade() {
     const task = await api('/api/system/upgrade', { method: 'POST', body: {} });
-    setUpgradeLog([]);
+    setUpgradeProgress({ progress: 0, stage: 'preparing', status: 'running', message: '' });
     const source = new EventSource(`/api/system/upgrade/${task.taskId}/events`, { withCredentials: true });
-    const push = (event) => setUpgradeLog((current) => [...current, JSON.parse(event.data)]);
-    ['start', 'log', 'error', 'done'].forEach((type) => source.addEventListener(type, push));
+    const push = (event) => {
+      const data = JSON.parse(event.data);
+      setUpgradeProgress({
+        progress: data.progress ?? 0,
+        stage: data.stage || 'running',
+        status: data.status || (data.type === 'done' ? 'completed' : 'running'),
+        message: data.message || ''
+      });
+    };
+    ['progress', 'error', 'done'].forEach((type) => source.addEventListener(type, push));
     source.addEventListener('done', () => source.close());
   }
 
@@ -95,7 +119,9 @@ export function SettingsPanel({ settings, onSettings, t }) {
 
         <div className="settings-card">
           <h3><RefreshCw size={16} /> {t('upgrade')}</h3>
-          <button type="button" onClick={checkVersion}>{t('checkVersion')}</button>
+          <button type="button" onClick={() => checkVersion('manual')} disabled={checking || Date.now() < nextManualCheckAt}>
+            {checking ? t('checkingVersion') : Date.now() < nextManualCheckAt ? t('checkLater') : t('checkVersion')}
+          </button>
           {version && (
             <p>
               {t('local')} {version.remote.localVersion || version.local.version}
@@ -105,9 +131,32 @@ export function SettingsPanel({ settings, onSettings, t }) {
             </p>
           )}
           <button type="button" onClick={startUpgrade}>{t('runUpgrade')}</button>
-          <pre className="upgrade-log">{upgradeLog.map((item) => item.message).filter(Boolean).join('\n')}</pre>
+          <div className="upgrade-progress">
+            <div className="upgrade-progress-label">
+              <span>{t('upgradeProgress')}</span>
+              <strong>{upgradeProgress.progress}%</strong>
+            </div>
+            <progress max="100" value={upgradeProgress.progress} />
+            <small>{stageLabel(upgradeProgress.stage, t)}</small>
+          </div>
         </div>
       </div>
     </section>
   );
+}
+
+function stageLabel(stage, t) {
+  const map = {
+    idle: 'upgradeIdle',
+    queued: 'upgradeIdle',
+    preparing: 'upgradePreparing',
+    fetching: 'upgradeFetching',
+    installing: 'upgradeInstalling',
+    building: 'upgradeBuilding',
+    restarting: 'upgradeRestarting',
+    running: 'upgradeRunning',
+    completed: 'upgradeCompleted',
+    failed: 'upgradeFailed'
+  };
+  return t(map[stage] || 'upgradeRunning');
 }

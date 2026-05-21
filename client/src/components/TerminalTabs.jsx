@@ -1,37 +1,16 @@
-import { Plus, Send, X } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import { decodeBase64ToText, ensureTrailingNewline } from '../utils.js';
 
-export function TerminalTabs({ tabs, activeTabId, onActiveTab, onCloseTab, onNewTab, connection, commands, t }) {
+export function TerminalTabs({ tabs, activeTabId, t }) {
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
   return (
     <section className="terminal-card">
-      <div className="tab-strip">
-        {tabs.map((tab) => (
-          <button
-            type="button"
-            className={`tab-button ${tab.id === activeTabId ? 'active' : ''}`}
-            key={tab.id}
-            onClick={() => onActiveTab(tab.id)}
-          >
-            <span>{tab.title}</span>
-            <X size={14} onClick={(event) => {
-              event.stopPropagation();
-              onCloseTab(tab.id);
-            }} />
-          </button>
-        ))}
-        {connection && (
-          <button className="icon-button" title={t('openNewTab')} type="button" onClick={() => onNewTab(connection)}>
-            <Plus size={16} />
-          </button>
-        )}
-      </div>
       {activeTab ? (
-        <TerminalSession key={activeTab.id} tab={activeTab} commands={commands} t={t} />
+        <TerminalSession key={activeTab.id} tab={activeTab} t={t} />
       ) : (
         <div className="empty-state">{t('selectServerTerminal')}</div>
       )}
@@ -39,15 +18,20 @@ export function TerminalTabs({ tabs, activeTabId, onActiveTab, onCloseTab, onNew
   );
 }
 
-function TerminalSession({ tab, commands, t }) {
+function TerminalSession({ tab, t }) {
   const containerRef = useRef(null);
   const wsRef = useRef(null);
   const terminalRef = useRef(null);
   const fitRef = useRef(null);
+  const resizeObserverRef = useRef(null);
+  const reconnectingRef = useRef(false);
+  const queuedInputRef = useRef('');
+  const mountedRef = useRef(false);
   const [buffer, setBuffer] = useState('');
   const [status, setStatus] = useState('connecting');
 
   useEffect(() => {
+    mountedRef.current = true;
     const terminal = new Terminal({
       cursorBlink: true,
       fontSize: 13,
@@ -66,41 +50,29 @@ function TerminalSession({ tab, commands, t }) {
     terminalRef.current = terminal;
     fitRef.current = fit;
 
-    const { cols, rows } = terminal;
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const socket = new WebSocket(`${protocol}://${window.location.host}/ws/terminal?connectionId=${tab.connectionId}&cols=${cols}&rows=${rows}`);
-    wsRef.current = socket;
-
-    socket.addEventListener('open', () => setStatus('handshaking'));
-    socket.addEventListener('close', () => setStatus('closed'));
-    socket.addEventListener('message', (event) => {
-      const message = JSON.parse(event.data);
-      if (message.type === 'ready') {
-        setStatus('connected');
-        if (tab.initialCommand) {
-          socket.send(JSON.stringify({ type: 'input', data: ensureTrailingNewline(tab.initialCommand) }));
-        }
-      }
-      if (message.type === 'data') terminal.write(decodeBase64ToText(message.data));
-      if (message.type === 'error') {
-        terminal.writeln(`\r\n[error] ${message.message}`);
-        setStatus('error');
-      }
-    });
-
-    terminal.onData((data) => socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify({ type: 'input', data })));
+    const dataDisposable = terminal.onData((data) => sendOrReconnect(data, false));
 
     const resizeObserver = new ResizeObserver(() => {
       fit.fit();
-      if (socket.readyState === WebSocket.OPEN) {
+      const socket = wsRef.current;
+      if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }));
       }
     });
+    resizeObserverRef.current = resizeObserver;
     resizeObserver.observe(containerRef.current);
 
+    connectTerminal({ initialCommand: tab.initialCommand });
+
+    const closeSocket = () => wsRef.current?.close(1001, 'page hidden');
+    window.addEventListener('pagehide', closeSocket);
+
     return () => {
+      mountedRef.current = false;
+      window.removeEventListener('pagehide', closeSocket);
       resizeObserver.disconnect();
-      socket.close();
+      dataDisposable.dispose();
+      wsRef.current?.close();
       terminal.dispose();
     };
   }, [tab]);
@@ -113,24 +85,77 @@ function TerminalSession({ tab, commands, t }) {
     return () => window.removeEventListener('lumeshell:send', onSend);
   }, [tab.id, buffer]);
 
+  function connectTerminal({ initialCommand = '' } = {}) {
+    if (!mountedRef.current || reconnectingRef.current) return;
+    const currentSocket = wsRef.current;
+    if (currentSocket?.readyState === WebSocket.OPEN || currentSocket?.readyState === WebSocket.CONNECTING) return;
+
+    reconnectingRef.current = true;
+    setStatus('connecting');
+    const terminal = terminalRef.current;
+    const cols = terminal?.cols || 100;
+    const rows = terminal?.rows || 30;
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const socket = new WebSocket(`${protocol}://${window.location.host}/ws/terminal?connectionId=${tab.connectionId}&cols=${cols}&rows=${rows}`);
+    wsRef.current = socket;
+
+    socket.addEventListener('open', () => setStatus('handshaking'));
+    socket.addEventListener('close', () => {
+      if (wsRef.current === socket) {
+        wsRef.current = null;
+        setStatus('closed');
+      }
+      reconnectingRef.current = false;
+    });
+    socket.addEventListener('error', () => {
+      setStatus('error');
+      reconnectingRef.current = false;
+    });
+    socket.addEventListener('message', (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'ready') {
+        setStatus('connected');
+        reconnectingRef.current = false;
+        const queuedInput = queuedInputRef.current;
+        queuedInputRef.current = '';
+        if (initialCommand) socket.send(JSON.stringify({ type: 'input', data: ensureTrailingNewline(initialCommand) }));
+        if (queuedInput) socket.send(JSON.stringify({ type: 'input', data: queuedInput }));
+      }
+      if (message.type === 'data') terminalRef.current?.write(decodeBase64ToText(message.data));
+      if (message.type === 'error') {
+        terminalRef.current?.writeln(`\r\n[error] ${message.message}`);
+        setStatus('error');
+      }
+    });
+  }
+
+  function sendOrReconnect(value, clear = true) {
+    const data = clear ? ensureTrailingNewline(value) : value;
+    if (!data) return;
+    const socket = wsRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'input', data }));
+      if (clear) setBuffer('');
+      return;
+    }
+    queuedInputRef.current += data;
+    connectTerminal();
+    if (clear) setBuffer('');
+  }
+
   function sendBuffered(value = buffer, clear = true) {
     const data = ensureTrailingNewline(value);
-    if (!data || wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: 'input', data }));
-    if (clear) setBuffer('');
+    if (!data) return;
+    sendOrReconnect(data, clear);
   }
 
   return (
     <div className="terminal-session">
       <div className="terminal-toolbar">
-        <span className={`status-dot ${status}`} />
-        <span>{status}</span>
-        <div className="command-pills">
-          {commands.slice(0, 5).map((item) => (
-            <button type="button" key={item.id} title={item.command} onClick={() => sendBuffered(item.command)}>
-              {item.title}
-            </button>
-          ))}
+        <div className="terminal-status">
+          <span className={`status-dot ${status}`} />
+          <strong>{tab.title}</strong>
+          <span>{t(`terminalStatus_${status}`)}</span>
         </div>
       </div>
       <div className="terminal-viewport" ref={containerRef} />

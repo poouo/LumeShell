@@ -37,9 +37,13 @@ awk '/^cpu / {print "cpu_total=" ($2+$3+$4+$5+$6+$7+$8+$9+$10) "\ncpu_idle=" ($5
 awk '
 /MemTotal/ {total=$2}
 /MemAvailable/ {available=$2}
-END {print "mem_total_kb=" total "\nmem_available_kb=" available}
+ /SwapTotal/ {swap_total=$2}
+ /SwapFree/ {swap_free=$2}
+END {print "mem_total_kb=" total "\nmem_available_kb=" available "\nswap_total_kb=" swap_total "\nswap_free_kb=" swap_free}
 ' /proc/meminfo
 df -Pk / | awk 'NR==2 {print "disk_total_kb=" $2 "\ndisk_used_kb=" $3 "\ndisk_available_kb=" $4 "\ndisk_mount=" $6}'
+awk '{print "uptime_seconds=" int($1)}' /proc/uptime
+awk '{print "load_1=" $1 "\nload_5=" $2 "\nload_15=" $3}' /proc/loadavg
 awk 'NR>2 {
   gsub(":", "", $1);
   rx += $2;
@@ -59,11 +63,19 @@ export async function readMetrics(connectionId) {
     const memAvailable = Number(kv.mem_available_kb || 0) * 1024;
     const diskTotal = Number(kv.disk_total_kb || 0) * 1024;
     const diskUsed = Number(kv.disk_used_kb || 0) * 1024;
+    const swapTotal = Number(kv.swap_total_kb || 0) * 1024;
+    const swapFree = Number(kv.swap_free_kb || 0) * 1024;
     return {
       sampledAt: new Date().toISOString(),
       hostname: kv.hostname || connection.host,
       kernel: kv.kernel || '',
       uptime: kv.uptime || '',
+      uptimeSeconds: Number(kv.uptime_seconds || 0),
+      load: {
+        one: Number(kv.load_1 || 0),
+        five: Number(kv.load_5 || 0),
+        fifteen: Number(kv.load_15 || 0)
+      },
       cpu: {
         total: Number(kv.cpu_total || 0),
         idle: Number(kv.cpu_idle || 0)
@@ -72,6 +84,11 @@ export async function readMetrics(connectionId) {
         total: memTotal,
         used: Math.max(0, memTotal - memAvailable),
         available: memAvailable
+      },
+      swap: {
+        total: swapTotal,
+        used: Math.max(0, swapTotal - swapFree),
+        available: swapFree
       },
       disk: {
         mount: kv.disk_mount || '/',

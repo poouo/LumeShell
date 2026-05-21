@@ -1,11 +1,11 @@
 {
   "name": "LumeShell",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "channel": "stable",
   "notes": [
-    "Add Chinese/English UI language switching with Chinese as the default.",
-    "Show the generated initial admin password at the end of install scripts.",
-    "Expand README with Chinese-first bilingual documentation."
+    "Refine the FinalShell-style workspace with top tab switching and modal server management.",
+    "Improve SFTP browsing with cached sessions, background loading, drag upload, and right-click file actions.",
+    "Add compact server metrics, 15-second traffic lines, command management, and SSH reconnect-on-input behavior."
   ],
   "minNode": "20.10.0"
 }

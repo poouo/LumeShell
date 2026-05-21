@@ -1,6 +1,6 @@
 {
   "name": "lumeshell",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A modern personal WebSSH console with encrypted credentials, SFTP file management, quick commands, and built-in upgrades.",
   "type": "module",
   "private": false,

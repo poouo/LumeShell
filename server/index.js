@@ -8,7 +8,7 @@ import { WebSocketServer } from 'ws';
 import { config, rootDir } from './lib/config.js';
 import { store } from './lib/store.js';
 import { requireWsAuth } from './lib/auth.js';
-import { getConnection, toSshConfig } from './lib/connections.js';
+import { formatSshError, getConnection, isSshConnectionError, toSshConfig } from './lib/connections.js';
 import { sendError } from './lib/http.js';
 import { authRouter } from './routes/auth.js';
 import { commandsRouter } from './routes/commands.js';
@@ -68,12 +68,27 @@ app.use((_req, res, next) => {
 });
 
 app.use((err, _req, res, _next) => {
-  console.error(err);
+  if (!isSshConnectionError(err)) console.error(err);
   if (res.headersSent) return;
+  if (isSshConnectionError(err)) {
+    sendError(res, 502, formatSshError(err));
+    return;
+  }
   sendError(res, 500, err.message || 'Internal server error');
 });
 
 const wss = new WebSocketServer({ noServer: true });
+const wsHeartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, 30_000);
+wsHeartbeat.unref?.();
 
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -93,6 +108,11 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 wss.on('connection', (ws, _req, url) => {
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+
   const connectionId = url.searchParams.get('connectionId');
   const term = url.searchParams.get('term') || 'xterm-256color';
   const cols = Number(url.searchParams.get('cols') || 100);
@@ -107,8 +127,16 @@ wss.on('connection', (ws, _req, url) => {
 
   const client = new Client();
   let stream = null;
+  let closed = false;
   const send = (payload) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
+  };
+  const closeAll = () => {
+    if (closed) return;
+    closed = true;
+    stream?.end();
+    client.end();
+    ws.close();
   };
 
   client.on('ready', () => {
@@ -127,8 +155,8 @@ wss.on('connection', (ws, _req, url) => {
   });
 
   client.on('error', (err) => {
-    send({ type: 'error', message: err.message });
-    ws.close();
+    send({ type: 'error', message: formatSshError(err) });
+    closeAll();
   });
 
   ws.on('message', (raw) => {
@@ -147,15 +175,14 @@ wss.on('connection', (ws, _req, url) => {
   });
 
   ws.on('close', () => {
-    stream?.end();
-    client.end();
+    closeAll();
   });
 
   try {
     client.connect(toSshConfig(connection));
   } catch (err) {
-    send({ type: 'error', message: err.message });
-    ws.close();
+    send({ type: 'error', message: formatSshError(err) });
+    closeAll();
   }
 });
 

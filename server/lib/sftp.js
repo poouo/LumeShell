@@ -3,6 +3,9 @@ import path from 'node:path';
 import archiver from 'archiver';
 import { connectSftp, getConnection } from './connections.js';
 
+const SFTP_IDLE_MS = 60_000;
+const sftpSessions = new Map();
+
 function normalizeRemote(input = '/') {
   let next = String(input || '/').replaceAll('\\', '/');
   if (!next.startsWith('/')) next = `/${next}`;
@@ -27,13 +30,103 @@ function attrsToItem(parent, item) {
   };
 }
 
-async function withSftp(connectionId, fn) {
+function forgetSftpSession(connectionId, session) {
+  const current = sftpSessions.get(connectionId);
+  if (current?.session === session || current === session) sftpSessions.delete(connectionId);
+  if (session?.idleTimer) clearTimeout(session.idleTimer);
+}
+
+function closeSftpSession(connectionId, session) {
+  if (!session || session.closed) return;
+  session.closed = true;
+  forgetSftpSession(connectionId, session);
+  try {
+    session.client.end();
+  } catch {
+    // The underlying SSH client may already be closed by the remote host.
+  }
+}
+
+function scheduleSftpClose(connectionId, session) {
+  if (session.closed || session.active > 0) return;
+  if (session.idleTimer) clearTimeout(session.idleTimer);
+  session.idleTimer = setTimeout(() => closeSftpSession(connectionId, session), SFTP_IDLE_MS);
+  session.idleTimer.unref?.();
+}
+
+async function createSftpSession(connectionId) {
   const connection = getConnection(connectionId);
   const { client, sftp } = await connectSftp(connection);
+  const session = { client, sftp, active: 0, idleTimer: null, closed: false };
+  const markClosed = () => {
+    session.closed = true;
+    forgetSftpSession(connectionId, session);
+  };
+  client.on('close', markClosed);
+  client.on('end', markClosed);
+  client.on('error', markClosed);
+  sftp.on?.('close', markClosed);
+  sftp.on?.('error', markClosed);
+  return session;
+}
+
+async function getSftpSession(connectionId) {
+  const current = sftpSessions.get(connectionId);
+  if (current?.session && !current.session.closed) {
+    if (current.session.idleTimer) clearTimeout(current.session.idleTimer);
+    return current.session;
+  }
+  if (current?.promise) return current.promise;
+
+  const promise = createSftpSession(connectionId)
+    .then((session) => {
+      sftpSessions.set(connectionId, { session });
+      return session;
+    })
+    .catch((err) => {
+      if (sftpSessions.get(connectionId)?.promise === promise) sftpSessions.delete(connectionId);
+      throw err;
+    });
+  sftpSessions.set(connectionId, { promise });
+  return promise;
+}
+
+function isRecoverableSftpError(err) {
+  return /closed|ended|econnreset|epipe|no response|channel|socket/i.test(err?.message || err?.code || '');
+}
+
+async function withSftp(connectionId, fn, options = {}) {
+  const { dedicated = false, retry = false } = options;
+  if (dedicated) {
+    const connection = getConnection(connectionId);
+    const { client, sftp } = await connectSftp(connection);
+    try {
+      return await fn(sftp);
+    } finally {
+      client.end();
+    }
+  }
+
+  const run = async () => {
+    const session = await getSftpSession(connectionId);
+    session.active += 1;
+    if (session.idleTimer) clearTimeout(session.idleTimer);
+    try {
+      return await fn(session.sftp);
+    } catch (err) {
+      closeSftpSession(connectionId, session);
+      throw err;
+    } finally {
+      session.active = Math.max(0, session.active - 1);
+      scheduleSftpClose(connectionId, session);
+    }
+  };
+
   try {
-    return await fn(sftp);
-  } finally {
-    client.end();
+    return await run();
+  } catch (err) {
+    if (!retry || !isRecoverableSftpError(err)) throw err;
+    return run();
   }
 }
 
@@ -54,7 +147,7 @@ export async function listRemote(connectionId, dirPath = '/') {
       if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
-  });
+  }, { retry: true });
 }
 
 export async function mkdirRemote(connectionId, dirPath) {
