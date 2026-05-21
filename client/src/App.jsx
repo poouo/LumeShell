@@ -8,12 +8,13 @@ import { Login } from './components/Login.jsx';
 import { MetricsPanel } from './components/MetricsPanel.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
 import { TerminalTabs } from './components/TerminalTabs.jsx';
+import { createTranslator } from './i18n.js';
 import { ensureTrailingNewline, makeTab } from './utils.js';
 
 export default function App() {
   const [ready, setReady] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [settings, setSettings] = useState({ theme: 'dark' });
+  const [settings, setSettings] = useState({ theme: 'dark', language: 'zh-CN' });
   const [connections, setConnections] = useState([]);
   const [commands, setCommands] = useState([]);
   const [activeConnectionId, setActiveConnectionId] = useState('');
@@ -23,6 +24,8 @@ export default function App() {
   const [error, setError] = useState('');
 
   const theme = settings.theme || 'dark';
+  const language = settings.language || 'zh-CN';
+  const t = useMemo(() => createTranslator(language), [language]);
   const activeConnection = useMemo(
     () => connections.find((connection) => connection.id === activeConnectionId) || connections[0],
     [connections, activeConnectionId]
@@ -149,12 +152,12 @@ export default function App() {
     }
   }
 
-  if (!ready) return <div className="boot-screen">Loading LumeShell...</div>;
+  if (!ready) return <div className="boot-screen">{t('loading')}</div>;
 
   if (!authenticated) {
     return (
       <>
-        <Login onLogin={login} theme={theme} onToggleTheme={toggleTheme} />
+        <Login onLogin={login} theme={theme} onToggleTheme={toggleTheme} t={t} />
         {error && <div className="toast error">{error}</div>}
       </>
     );
@@ -167,29 +170,29 @@ export default function App() {
           <img src="/logo.svg" alt="" />
           <div>
             <strong>LumeShell</strong>
-            <small>{window.location.protocol === 'https:' || window.location.hostname === 'localhost' ? 'Encrypted-ready console' : 'Use HTTPS on public networks'}</small>
+            <small>{window.location.protocol === 'https:' || window.location.hostname === 'localhost' ? t('encryptedReady') : t('useHttps')}</small>
           </div>
         </div>
         <nav className="segmented">
           <button className={view === 'workspace' ? 'active' : ''} type="button" onClick={() => setView('workspace')}>
             <TerminalSquare size={16} />
-            Workspace
+            {t('workspace')}
           </button>
           <button className={view === 'settings' ? 'active' : ''} type="button" onClick={() => setView('settings')}>
             <Settings size={16} />
-            Settings
+            {t('settings')}
           </button>
         </nav>
         <div className="topbar-actions">
-          <button className="icon-button" type="button" title="Toggle theme" onClick={toggleTheme}>
+          <button className="icon-button" type="button" title={t('toggleTheme')} onClick={toggleTheme}>
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button className="ghost-button" type="button" onClick={logout}>Logout</button>
+          <button className="ghost-button" type="button" onClick={logout}>{t('logout')}</button>
         </div>
       </header>
 
       {view === 'settings' ? (
-        <SettingsPanel settings={settings} onSettings={setSettings} />
+        <SettingsPanel settings={settings} onSettings={setSettings} t={t} />
       ) : (
         <main className="workspace-layout">
           <ConnectionPanel
@@ -200,9 +203,10 @@ export default function App() {
             onUpdate={updateConnection}
             onDelete={deleteConnection}
             onOpenTab={openTab}
+            t={t}
           />
           <div className="main-column">
-            <MetricsPanel connection={activeConnection} />
+            <MetricsPanel connection={activeConnection} t={t} />
             <TerminalTabs
               tabs={tabs}
               activeTabId={activeTabId}
@@ -211,10 +215,11 @@ export default function App() {
               onNewTab={openTab}
               connection={activeConnection}
               commands={commands.filter((command) => !command.connectionId || command.connectionId === activeConnection?.id)}
+              t={t}
             />
           </div>
           <div className="right-column">
-            <FileManager connection={activeConnection} />
+            <FileManager connection={activeConnection} t={t} />
             <CommandsPanel
               commands={commands}
               connections={connections}
@@ -223,6 +228,7 @@ export default function App() {
               onUpdate={updateCommand}
               onDelete={deleteCommand}
               onRun={runCommand}
+              t={t}
             />
           </div>
         </main>

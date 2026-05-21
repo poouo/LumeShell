@@ -13,7 +13,7 @@ const emptyConnection = {
   remoteBase: '/'
 };
 
-export function ConnectionPanel({ connections, activeConnectionId, onSelect, onCreate, onUpdate, onDelete, onOpenTab }) {
+export function ConnectionPanel({ connections, activeConnectionId, onSelect, onCreate, onUpdate, onDelete, onOpenTab, t }) {
   const [draft, setDraft] = useState(emptyConnection);
   const [editingId, setEditingId] = useState('');
 
@@ -49,10 +49,10 @@ export function ConnectionPanel({ connections, activeConnectionId, onSelect, onC
     <aside className="side-panel">
       <div className="panel-heading">
         <div>
-          <span className="eyebrow">Servers</span>
-          <h2>Connections</h2>
+          <span className="eyebrow">{t('servers')}</span>
+          <h2>{t('connections')}</h2>
         </div>
-        <button className="icon-button" type="button" title="New connection" onClick={() => setEditingId('')}>
+        <button className="icon-button" type="button" title={t('newConnection')} onClick={() => setEditingId('')}>
           <Plus size={18} />
         </button>
       </div>
@@ -77,59 +77,59 @@ export function ConnectionPanel({ connections, activeConnectionId, onSelect, onC
       <form className="editor-form" onSubmit={save}>
         <div className="form-row split">
           <label>
-            Name
-            <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Production" />
+            {t('name')}
+            <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t('production')} />
           </label>
           <label>
-            Port
+            {t('port')}
             <input type="number" value={draft.port} onChange={(event) => setDraft({ ...draft, port: event.target.value })} />
           </label>
         </div>
         <label>
-          Host
+          {t('host')}
           <input required value={draft.host} onChange={(event) => setDraft({ ...draft, host: event.target.value })} placeholder="192.168.1.10" />
         </label>
         <label>
-          Username
+          {t('username')}
           <input required value={draft.username} onChange={(event) => setDraft({ ...draft, username: event.target.value })} placeholder="root" />
         </label>
         <label>
-          Auth
+          {t('auth')}
           <select value={draft.authType} onChange={(event) => setDraft({ ...draft, authType: event.target.value })}>
-            <option value="password">Password</option>
-            <option value="privateKey">Private key</option>
+            <option value="password">{t('password')}</option>
+            <option value="privateKey">{t('privateKey')}</option>
           </select>
         </label>
         {draft.authType === 'password' ? (
           <label>
-            Password
-            <input type="password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} placeholder={editingId ? 'Keep unchanged' : ''} />
+            {t('password')}
+            <input type="password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} placeholder={editingId ? t('keepUnchanged') : ''} />
           </label>
         ) : (
           <>
             <label>
-              Private key
-              <textarea value={draft.privateKey} onChange={(event) => setDraft({ ...draft, privateKey: event.target.value })} placeholder={editingId ? 'Keep unchanged' : '-----BEGIN OPENSSH PRIVATE KEY-----'} rows={5} />
+              {t('privateKey')}
+              <textarea value={draft.privateKey} onChange={(event) => setDraft({ ...draft, privateKey: event.target.value })} placeholder={editingId ? t('keepUnchanged') : '-----BEGIN OPENSSH PRIVATE KEY-----'} rows={5} />
             </label>
             <label>
-              Key passphrase
-              <input type="password" value={draft.passphrase} onChange={(event) => setDraft({ ...draft, passphrase: event.target.value })} placeholder="Optional" />
+              {t('keyPassphrase')}
+              <input type="password" value={draft.passphrase} onChange={(event) => setDraft({ ...draft, passphrase: event.target.value })} placeholder={t('optional')} />
             </label>
           </>
         )}
         <label>
-          Default path
+          {t('defaultPath')}
           <input value={draft.remoteBase} onChange={(event) => setDraft({ ...draft, remoteBase: event.target.value })} />
         </label>
         <div className="form-actions">
           <button type="submit">
             <Save size={16} />
-            Save
+            {t('save')}
           </button>
           {editingId && (
             <button className="danger-button" type="button" onClick={() => onDelete(editingId)}>
               <Trash2 size={16} />
-              Delete
+              {t('delete')}
             </button>
           )}
         </div>
@@ -140,11 +140,11 @@ export function ConnectionPanel({ connections, activeConnectionId, onSelect, onC
           <div key={connection.id} className="mini-action">
             <button type="button" onClick={() => setEditingId(connection.id)}>
               <KeyRound size={15} />
-              Edit {connection.name}
+              {t('edit')} {connection.name}
             </button>
             <button type="button" onClick={() => onOpenTab(connection)}>
               <Plug size={15} />
-              Connect
+              {t('connect')}
             </button>
           </div>
         ))}

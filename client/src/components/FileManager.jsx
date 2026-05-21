@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, downloadUrl } from '../api.js';
 import { formatBytes, joinRemote, parentDir } from '../utils.js';
 
-export function FileManager({ connection }) {
+export function FileManager({ connection, t }) {
   const [path, setPath] = useState(connection?.remoteBase || '/');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -29,14 +29,14 @@ export function FileManager({ connection }) {
   }
 
   async function mkdir() {
-    const name = window.prompt('Directory name');
+    const name = window.prompt(t('directoryName'));
     if (!name) return;
     await api('/api/files/mkdir', { method: 'POST', body: { connectionId: connection.id, path: joinRemote(path, name) } });
     await refresh();
   }
 
   async function remove(item) {
-    if (!window.confirm(`Delete ${item.path}?`)) return;
+    if (!window.confirm(t('deletePathConfirm', { path: item.path }))) return;
     await api('/api/files/delete', { method: 'POST', body: { connectionId: connection.id, path: item.path } });
     await refresh();
   }
@@ -64,7 +64,7 @@ export function FileManager({ connection }) {
     }))];
   }, [path]);
 
-  if (!connection) return <section className="files-panel empty-state">Select a server to browse files.</section>;
+  if (!connection) return <section className="files-panel empty-state">{t('selectServerFiles')}</section>;
 
   return (
     <section
@@ -83,21 +83,21 @@ export function FileManager({ connection }) {
       <div className="panel-heading compact">
         <div>
           <span className="eyebrow">SFTP</span>
-          <h2>Files</h2>
+          <h2>{t('files')}</h2>
         </div>
         <div className="toolbar-actions">
-          <label className="icon-button" title="Upload files">
+          <label className="icon-button" title={t('uploadFiles')}>
             <Upload size={17} />
             <input type="file" multiple hidden onChange={(event) => uploadFiles(event.target.files)} />
           </label>
-          <label className="icon-button" title="Upload folder">
+          <label className="icon-button" title={t('uploadFolder')}>
             <FolderPlus size={17} />
             <input type="file" multiple webkitdirectory="" hidden onChange={(event) => uploadFiles(event.target.files)} />
           </label>
-          <button className="icon-button" type="button" title="New directory" onClick={mkdir}>
+          <button className="icon-button" type="button" title={t('newDirectory')} onClick={mkdir}>
             <FolderPlus size={17} />
           </button>
-          <button className="icon-button" type="button" title="Refresh" onClick={refresh}>
+          <button className="icon-button" type="button" title={t('refresh')} onClick={refresh}>
             <RefreshCcw size={17} />
           </button>
         </div>
@@ -122,21 +122,21 @@ export function FileManager({ connection }) {
               {item.type === 'directory' ? <Folder size={17} /> : <File size={17} />}
               <span>{item.name}</span>
             </button>
-            <small>{item.type === 'directory' ? 'folder' : formatBytes(item.size)}</small>
+            <small>{item.type === 'directory' ? t('folder') : formatBytes(item.size)}</small>
             <small>{item.modifiedAt ? new Date(item.modifiedAt).toLocaleString() : ''}</small>
             <span className="row-actions">
-              <a className="icon-button" title="Download" href={downloadUrl('/api/files/download', { connectionId: connection.id, path: item.path })}>
+              <a className="icon-button" title={t('download')} href={downloadUrl('/api/files/download', { connectionId: connection.id, path: item.path })}>
                 <Download size={15} />
               </a>
-              <button className="icon-button danger" type="button" title="Delete" onClick={() => remove(item)}>
+              <button className="icon-button danger" type="button" title={t('delete')} onClick={() => remove(item)}>
                 <Trash2 size={15} />
               </button>
             </span>
           </div>
         ))}
       </div>
-      {loading && <div className="drop-hint">Loading...</div>}
-      {dragging && <div className="drop-hint">Drop files or folders to upload</div>}
+      {loading && <div className="drop-hint">{t('loadingFiles')}</div>}
+      {dragging && <div className="drop-hint">{t('dropUpload')}</div>}
     </section>
   );
 }

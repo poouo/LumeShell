@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import { decodeBase64ToText, ensureTrailingNewline } from '../utils.js';
 
-export function TerminalTabs({ tabs, activeTabId, onActiveTab, onCloseTab, onNewTab, connection, commands }) {
+export function TerminalTabs({ tabs, activeTabId, onActiveTab, onCloseTab, onNewTab, connection, commands, t }) {
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
   return (
@@ -25,21 +25,21 @@ export function TerminalTabs({ tabs, activeTabId, onActiveTab, onCloseTab, onNew
           </button>
         ))}
         {connection && (
-          <button className="icon-button" title="Open new tab" type="button" onClick={() => onNewTab(connection)}>
+          <button className="icon-button" title={t('openNewTab')} type="button" onClick={() => onNewTab(connection)}>
             <Plus size={16} />
           </button>
         )}
       </div>
       {activeTab ? (
-        <TerminalSession key={activeTab.id} tab={activeTab} commands={commands} />
+        <TerminalSession key={activeTab.id} tab={activeTab} commands={commands} t={t} />
       ) : (
-        <div className="empty-state">Select a server and open a terminal tab.</div>
+        <div className="empty-state">{t('selectServerTerminal')}</div>
       )}
     </section>
   );
 }
 
-function TerminalSession({ tab, commands }) {
+function TerminalSession({ tab, commands, t }) {
   const containerRef = useRef(null);
   const wsRef = useRef(null);
   const terminalRef = useRef(null);
@@ -141,11 +141,11 @@ function TerminalSession({ tab, commands }) {
           onKeyDown={(event) => {
             if (event.key === 'Enter') sendBuffered();
           }}
-          placeholder="Buffered input: type here, press Enter or Send once"
+          placeholder={t('bufferedInput')}
         />
         <button type="button" onClick={() => sendBuffered()}>
           <Send size={16} />
-          Send
+          {t('send')}
         </button>
       </div>
     </div>

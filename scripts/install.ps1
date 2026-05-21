@@ -45,6 +45,11 @@ LUMESHELL_REQUIRE_HTTPS=false
 LUMESHELL_SECURE_COOKIES=false
 "@ | Set-Content -Path ".env"
   $Password | Set-Content -Path "data\initial-admin-password.txt"
+} else {
+  $Password = (Get-Content ".env" | Where-Object { $_ -like "LUMESHELL_ADMIN_PASSWORD=*" } | Select-Object -First 1) -replace "^LUMESHELL_ADMIN_PASSWORD=", ""
+  if (-not $Password -and (Test-Path "data\initial-admin-password.txt")) {
+    $Password = Get-Content "data\initial-admin-password.txt" | Select-Object -Last 1
+  }
 }
 
 Step "Installing dependencies"
@@ -56,4 +61,7 @@ npm run build
 Step "Installed"
 Write-Host "Run: npm start"
 Write-Host "URL: http://localhost:$Port"
+if ($Password) {
+  Write-Host "Initial admin password: $Password"
+}
 Write-Host "Initial password file: $InstallDir\data\initial-admin-password.txt"

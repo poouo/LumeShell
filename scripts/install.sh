@@ -72,6 +72,11 @@ EOF_ENV
   chmod 600 .env
   printf '%s\n' "$ADMIN_PASSWORD" > data/initial-admin-password.txt
   chmod 600 data/initial-admin-password.txt
+else
+  ADMIN_PASSWORD="$(grep '^LUMESHELL_ADMIN_PASSWORD=' .env | head -n 1 | cut -d= -f2- || true)"
+  if [ -z "$ADMIN_PASSWORD" ] && [ -f data/initial-admin-password.txt ]; then
+    ADMIN_PASSWORD="$(tail -n 1 data/initial-admin-password.txt)"
+  fi
 fi
 
 step "Installing npm dependencies"
@@ -104,5 +109,8 @@ systemctl enable --now "$SERVICE_NAME"
 
 step "Installed"
 echo "URL: http://$(hostname -I 2>/dev/null | awk '{print $1}'):${PORT}"
+if [ -n "${ADMIN_PASSWORD:-}" ]; then
+  echo "Initial admin password: ${ADMIN_PASSWORD}"
+fi
 echo "Initial password file: ${INSTALL_DIR}/data/initial-admin-password.txt"
 echo "For public networks, enable HTTPS through a reverse proxy or LUMESHELL_HTTPS_KEY/CERT."

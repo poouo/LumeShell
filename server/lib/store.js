@@ -11,14 +11,15 @@ function emptyStore() {
   return {
     meta: {
       name: 'LumeShell',
-      version: '0.1.0',
+      version: '0.2.0',
       createdAt: new Date().toISOString()
     },
     settings: {
       tokenTtlHours: config.defaultTokenTtlHours,
       githubRepo: config.githubRepo,
       publicUrl: config.publicUrl,
-      theme: 'dark'
+      theme: 'dark',
+      language: 'zh-CN'
     },
     security: null,
     connections: [],

@@ -1,9 +1,11 @@
 {
   "name": "LumeShell",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "channel": "stable",
   "notes": [
-    "Initial open-source release with WebSSH terminal, encrypted connection storage, SFTP file manager, quick commands, themes, and upgrade tasks."
+    "Add Chinese/English UI language switching with Chinese as the default.",
+    "Show the generated initial admin password at the end of install scripts.",
+    "Expand README with Chinese-first bilingual documentation."
   ],
   "minNode": "20.10.0"
 }

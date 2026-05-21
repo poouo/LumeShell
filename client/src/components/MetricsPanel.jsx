@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { formatBytes, percent } from '../utils.js';
 
-export function MetricsPanel({ connection }) {
+export function MetricsPanel({ connection, t }) {
   const [samples, setSamples] = useState([]);
   const lastRef = useRef(null);
 
@@ -54,13 +54,13 @@ export function MetricsPanel({ connection }) {
     }));
   }, [samples]);
 
-  if (!connection) return <section className="metrics-panel empty-state">Open a connection to view server metrics.</section>;
+  if (!connection) return <section className="metrics-panel empty-state">{t('openConnectionMetrics')}</section>;
 
   return (
     <section className="metrics-panel">
       <div className="panel-heading compact">
         <div>
-          <span className="eyebrow">Server</span>
+          <span className="eyebrow">{t('server')}</span>
           <h2>{latest?.hostname || connection.name}</h2>
         </div>
         <Activity size={18} />
@@ -70,10 +70,10 @@ export function MetricsPanel({ connection }) {
       ) : (
         <>
           <div className="metric-grid">
-            <Metric icon={<Cpu size={17} />} label="CPU" value={`${latest?.cpuPercent || 0}%`} />
-            <Metric icon={<MemoryStick size={17} />} label="Memory" value={`${percent(latest?.memory?.used, latest?.memory?.total)}%`} sub={`${formatBytes(latest?.memory?.used)} / ${formatBytes(latest?.memory?.total)}`} />
-            <Metric icon={<HardDrive size={17} />} label="Disk" value={`${percent(latest?.disk?.used, latest?.disk?.total)}%`} sub={`${formatBytes(latest?.disk?.used)} / ${formatBytes(latest?.disk?.total)}`} />
-            <Metric icon={<Network size={17} />} label="Network" value={`↓ ${formatBytes(latest?.rxRate)}/s`} sub={`↑ ${formatBytes(latest?.txRate)}/s`} />
+            <Metric icon={<Cpu size={17} />} label={t('cpu')} value={`${latest?.cpuPercent || 0}%`} />
+            <Metric icon={<MemoryStick size={17} />} label={t('memory')} value={`${percent(latest?.memory?.used, latest?.memory?.total)}%`} sub={`${formatBytes(latest?.memory?.used)} / ${formatBytes(latest?.memory?.total)}`} />
+            <Metric icon={<HardDrive size={17} />} label={t('disk')} value={`${percent(latest?.disk?.used, latest?.disk?.total)}%`} sub={`${formatBytes(latest?.disk?.used)} / ${formatBytes(latest?.disk?.total)}`} />
+            <Metric icon={<Network size={17} />} label={t('network')} value={`↓ ${formatBytes(latest?.rxRate)}/s`} sub={`↑ ${formatBytes(latest?.txRate)}/s`} />
           </div>
           <div className="traffic-chart" aria-label="Network traffic over the last 15 seconds">
             {graph.map((bar) => (
@@ -83,7 +83,7 @@ export function MetricsPanel({ connection }) {
               </span>
             ))}
           </div>
-          <p className="system-note">{latest?.kernel || 'Sampling every second'} {latest?.uptime ? `· ${latest.uptime}` : ''}</p>
+          <p className="system-note">{latest?.kernel || t('sampling')} {latest?.uptime ? ` · ${latest.uptime}` : ''}</p>
         </>
       )}
     </section>

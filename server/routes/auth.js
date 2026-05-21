@@ -28,7 +28,8 @@ authRouter.get('/me', requireAuth, asyncHandler(async (req, res) => {
     },
     settings: {
       tokenTtlHours: store.data.settings.tokenTtlHours,
-      theme: store.data.settings.theme || 'dark'
+      theme: store.data.settings.theme || 'dark',
+      language: store.data.settings.language || 'zh-CN'
     }
   });
 }));
