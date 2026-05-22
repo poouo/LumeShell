@@ -66,16 +66,16 @@ export function deleteConnection(id) {
   return store.data.connections.length !== before;
 }
 
-export function toSshConfig(connection) {
+export function toSshConfig(connection, overrides = {}) {
   if (!connection) throw new Error('Connection not found');
   const secret = store.getSecret();
   const cfg = {
     host: connection.host,
     port: Number(connection.port || 22),
     username: connection.username,
-    readyTimeout: 20_000,
-    keepaliveInterval: 15_000,
-    keepaliveCountMax: 3
+    readyTimeout: Number(overrides.readyTimeout ?? 15_000),
+    keepaliveInterval: Number(overrides.keepaliveInterval ?? 20_000),
+    keepaliveCountMax: Number(overrides.keepaliveCountMax ?? 9)
   };
   if (connection.password) cfg.password = decryptText(connection.password, secret);
   if (connection.privateKey) cfg.privateKey = decryptText(connection.privateKey, secret);

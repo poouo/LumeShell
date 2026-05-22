@@ -11,7 +11,7 @@ function emptyStore() {
   return {
     meta: {
       name: 'LumeShell',
-      version: '0.2.1',
+      version: '0.2.2',
       createdAt: new Date().toISOString()
     },
     settings: {

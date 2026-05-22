@@ -1082,6 +1082,22 @@ label {
   font-size: 15px;
 }
 
+.password-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 8px;
+  align-items: center;
+}
+
+.password-field input {
+  min-width: 0;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
 .upgrade-progress {
   display: grid;
   gap: 8px;

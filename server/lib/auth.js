@@ -67,8 +67,7 @@ export function requireWsAuth(req) {
   return verifyToken(token, store.getSecret());
 }
 
-export function changePassword(currentPassword, nextPassword) {
-  if (!verifyPassword(currentPassword, securityRecord())) return false;
+export function changePassword(nextPassword) {
   const { hash, salt, iterations } = hashPassword(nextPassword);
   store.data.security = {
     passwordHash: hash,

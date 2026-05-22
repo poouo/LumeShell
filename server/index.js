@@ -128,29 +128,44 @@ wss.on('connection', (ws, _req, url) => {
   const client = new Client();
   let stream = null;
   let closed = false;
+  let ready = false;
+  let pendingInput = '';
+  let pendingResize = { rows, cols };
+  let handshakeTimer = null;
   const send = (payload) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
   };
   const closeAll = () => {
     if (closed) return;
     closed = true;
+    if (handshakeTimer) clearTimeout(handshakeTimer);
     stream?.end();
     client.end();
     ws.close();
   };
 
   client.on('ready', () => {
+    ready = true;
+    if (handshakeTimer) clearTimeout(handshakeTimer);
     client.shell({ term, cols, rows }, (err, shell) => {
       if (err) {
         send({ type: 'error', message: err.message });
-        ws.close();
+        closeAll();
         return;
       }
       stream = shell;
       send({ type: 'ready' });
+      if (pendingResize) {
+        stream.setWindow(Number(pendingResize.rows || rows), Number(pendingResize.cols || cols));
+        pendingResize = null;
+      }
+      if (pendingInput) {
+        stream.write(pendingInput);
+        pendingInput = '';
+      }
       stream.on('data', (data) => send({ type: 'data', data: data.toString('base64') }));
       stream.stderr?.on('data', (data) => send({ type: 'data', data: data.toString('base64') }));
-      stream.on('close', () => ws.close());
+      stream.on('close', closeAll);
     });
   });
 
@@ -159,6 +174,9 @@ wss.on('connection', (ws, _req, url) => {
     closeAll();
   });
 
+  client.on('close', closeAll);
+  client.on('end', closeAll);
+
   ws.on('message', (raw) => {
     let message;
     try {
@@ -166,11 +184,19 @@ wss.on('connection', (ws, _req, url) => {
     } catch {
       return;
     }
-    if (message.type === 'input' && stream) {
-      stream.write(message.data || '');
+    if (message.type === 'input') {
+      if (stream) {
+        stream.write(message.data || '');
+      } else if (!closed) {
+        pendingInput += message.data || '';
+      }
     }
-    if (message.type === 'resize' && stream) {
-      stream.setWindow(Number(message.rows || 30), Number(message.cols || 100));
+    if (message.type === 'resize') {
+      pendingResize = { rows: Number(message.rows || 30), cols: Number(message.cols || 100) };
+      if (stream) {
+        stream.setWindow(pendingResize.rows, pendingResize.cols);
+        pendingResize = null;
+      }
     }
   });
 
@@ -179,6 +205,11 @@ wss.on('connection', (ws, _req, url) => {
   });
 
   try {
+    handshakeTimer = setTimeout(() => {
+      send({ type: 'error', message: 'SSH handshake timed out. Check the host, port, firewall, or SSH service.' });
+      closeAll();
+    }, 16_000);
+    handshakeTimer.unref?.();
     client.connect(toSshConfig(connection));
   } catch (err) {
     send({ type: 'error', message: formatSshError(err) });

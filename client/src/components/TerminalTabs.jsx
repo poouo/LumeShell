@@ -27,6 +27,7 @@ function TerminalSession({ tab, t }) {
   const reconnectingRef = useRef(false);
   const queuedInputRef = useRef('');
   const mountedRef = useRef(false);
+  const terminalReadyRef = useRef(false);
   const [buffer, setBuffer] = useState('');
   const [status, setStatus] = useState('connecting');
 
@@ -74,6 +75,7 @@ function TerminalSession({ tab, t }) {
       dataDisposable.dispose();
       wsRef.current?.close();
       terminal.dispose();
+      terminalReadyRef.current = false;
     };
   }, [tab]);
 
@@ -91,6 +93,7 @@ function TerminalSession({ tab, t }) {
     if (currentSocket?.readyState === WebSocket.OPEN || currentSocket?.readyState === WebSocket.CONNECTING) return;
 
     reconnectingRef.current = true;
+    terminalReadyRef.current = false;
     setStatus('connecting');
     const terminal = terminalRef.current;
     const cols = terminal?.cols || 100;
@@ -103,11 +106,13 @@ function TerminalSession({ tab, t }) {
     socket.addEventListener('close', () => {
       if (wsRef.current === socket) {
         wsRef.current = null;
+        terminalReadyRef.current = false;
         setStatus('closed');
       }
       reconnectingRef.current = false;
     });
     socket.addEventListener('error', () => {
+      terminalReadyRef.current = false;
       setStatus('error');
       reconnectingRef.current = false;
     });
@@ -116,6 +121,7 @@ function TerminalSession({ tab, t }) {
       if (message.type === 'ready') {
         setStatus('connected');
         reconnectingRef.current = false;
+        terminalReadyRef.current = true;
         const queuedInput = queuedInputRef.current;
         queuedInputRef.current = '';
         if (initialCommand) socket.send(JSON.stringify({ type: 'input', data: ensureTrailingNewline(initialCommand) }));
@@ -124,6 +130,7 @@ function TerminalSession({ tab, t }) {
       if (message.type === 'data') terminalRef.current?.write(decodeBase64ToText(message.data));
       if (message.type === 'error') {
         terminalRef.current?.writeln(`\r\n[error] ${message.message}`);
+        terminalReadyRef.current = false;
         setStatus('error');
       }
     });
@@ -133,7 +140,7 @@ function TerminalSession({ tab, t }) {
     const data = clear ? ensureTrailingNewline(value) : value;
     if (!data) return;
     const socket = wsRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
+    if (terminalReadyRef.current && socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'input', data }));
       if (clear) setBuffer('');
       return;

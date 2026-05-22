@@ -1,11 +1,11 @@
 {
   "name": "LumeShell",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "channel": "stable",
   "notes": [
-    "Refine the FinalShell-style workspace with top tab switching and modal server management.",
-    "Improve SFTP browsing with cached sessions, background loading, drag upload, and right-click file actions.",
-    "Add compact server metrics, 15-second traffic lines, command management, and SSH reconnect-on-input behavior."
+    "Improve terminal reconnection by queueing input until SSH shell readiness and cleaning up stalled handshakes.",
+    "Relax SSH keepalive handling to reduce disconnects during short network fluctuations.",
+    "Simplify admin password changes with two new-password fields, visibility toggles, and mismatch validation."
   ],
   "minNode": "20.10.0"
 }

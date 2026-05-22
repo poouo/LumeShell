@@ -1,4 +1,4 @@
-import { Download, KeyRound, RefreshCw, ShieldCheck, Upload } from 'lucide-react';
+import { Download, Eye, EyeOff, KeyRound, RefreshCw, ShieldCheck, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
@@ -10,6 +10,8 @@ export function SettingsPanel({ settings, onSettings, t }) {
   const [checking, setChecking] = useState(false);
   const [nextManualCheckAt, setNextManualCheckAt] = useState(0);
   const [upgradeProgress, setUpgradeProgress] = useState({ progress: 0, stage: 'idle', status: 'idle', message: '' });
+  const [passwordDraft, setPasswordDraft] = useState({ nextPassword: '', confirmPassword: '' });
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => setDraft(settings || {}), [settings]);
 
@@ -24,16 +26,21 @@ export function SettingsPanel({ settings, onSettings, t }) {
 
   async function changePassword(event) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (passwordDraft.nextPassword !== passwordDraft.confirmPassword) return;
     await api('/api/auth/password', {
       method: 'PUT',
       body: {
-        currentPassword: form.get('currentPassword'),
-        nextPassword: form.get('nextPassword')
+        nextPassword: passwordDraft.nextPassword
       }
     });
     window.location.reload();
   }
+
+  const passwordMismatch = Boolean(
+    passwordDraft.nextPassword &&
+    passwordDraft.confirmPassword &&
+    passwordDraft.nextPassword !== passwordDraft.confirmPassword
+  );
 
   async function checkVersion(mode = 'manual') {
     const now = Date.now();
@@ -102,9 +109,26 @@ export function SettingsPanel({ settings, onSettings, t }) {
 
         <form onSubmit={changePassword} className="settings-card">
           <h3><KeyRound size={16} /> {t('password')}</h3>
-          <input name="currentPassword" type="password" placeholder={t('currentPassword')} />
-          <input name="nextPassword" type="password" minLength={8} placeholder={t('newPassword')} />
-          <button type="submit">{t('changePassword')}</button>
+          <PasswordInput
+            name="nextPassword"
+            value={passwordDraft.nextPassword}
+            onChange={(value) => setPasswordDraft((current) => ({ ...current, nextPassword: value }))}
+            show={showPassword}
+            onToggle={() => setShowPassword((value) => !value)}
+            placeholder={t('newPassword')}
+            t={t}
+          />
+          <PasswordInput
+            name="confirmPassword"
+            value={passwordDraft.confirmPassword}
+            onChange={(value) => setPasswordDraft((current) => ({ ...current, confirmPassword: value }))}
+            show={showPassword}
+            onToggle={() => setShowPassword((value) => !value)}
+            placeholder={t('confirmPassword')}
+            t={t}
+          />
+          {passwordMismatch && <small className="field-error">{t('passwordMismatch')}</small>}
+          <button type="submit" disabled={passwordMismatch || passwordDraft.nextPassword.length < 8 || !passwordDraft.confirmPassword}>{t('changePassword')}</button>
         </form>
 
         <div className="settings-card">
@@ -142,6 +166,24 @@ export function SettingsPanel({ settings, onSettings, t }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function PasswordInput({ name, value, onChange, show, onToggle, placeholder, t }) {
+  return (
+    <div className="password-field">
+      <input
+        name={name}
+        type={show ? 'text' : 'password'}
+        minLength={8}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+      />
+      <button className="icon-button" type="button" title={show ? t('hidePassword') : t('showPassword')} onClick={onToggle}>
+        {show ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
   );
 }
 

@@ -35,13 +35,11 @@ authRouter.get('/me', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 authRouter.put('/password', requireAuth, asyncHandler(async (req, res) => {
-  const { currentPassword, nextPassword } = req.body || {};
+  const { nextPassword } = req.body || {};
   if (!nextPassword || nextPassword.length < 8) {
     return sendError(res, 400, 'New password must contain at least 8 characters');
   }
-  if (!changePassword(currentPassword || '', nextPassword)) {
-    return sendError(res, 400, 'Current password is incorrect');
-  }
+  changePassword(nextPassword);
   clearAuthCookie(res);
   res.json({ ok: true });
 }));
